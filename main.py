@@ -16,7 +16,7 @@ current_year = datetime.datetime.now().year % 100
 current_month = datetime.datetime.now().month
 
 # 
-bot_token = '7771888330:AAEAJReX9F-aPhZ3BELmfI-isTQxgaG4-HY'
+bot_token = '7771888330:AAFRd6TCVwWfIT3DkGMxYoU8tf6e-23oPEQ'
 admin_id = '6191863486'  # 
 api_id = '9615664'  # 
 api_hash = '32a7dd931eea1c701e2da971216b61b1'  # 
