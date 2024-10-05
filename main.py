@@ -16,7 +16,7 @@ current_year = datetime.datetime.now().year % 100
 current_month = datetime.datetime.now().month
 
 # 
-bot_token = '7771888330:AAFRd6TCVwWfIT3DkGMxYoU8tf6e-23oPEQ'
+bot_token = '7771888330:AAGTeKLD0ByMoXSXNA338BWjoJdDVW_qOUQ'
 admin_id = '6191863486'  # 
 api_id = '9615664'  # 
 api_hash = '32a7dd931eea1c701e2da971216b61b1'  # 
@@ -133,23 +133,23 @@ def save_to_file(text):
 def send_welcome(message):
     name = message.from_user.first_name
     welcome_message = (
-        f"Welcome, {name}!\n"
-        "⌯ Welcome to bot scrap cc\n\n"
-        "⇾ You can scrape from your username, ID, invitation link, or user chats\n"
-        "⇾ You can scrape from bank name or bin\n"
-        "⇾ You can scrape from more than one bank or bin, all you have to do is put ',' between them\n"
-        "   for example: 12345,12345,12345,etc\n\n"
-        "The commands are below 🧸"
+        f"● Welcome, {name}!\n"
+        "● Welcome to bot scrap cc\n\n"
+        "● You can scrape from your username, ID, invitation link, or user chats\n"
+        "● You can scrape from bank name or bin\n"
+        "● You can scrape from more than one bank or bin, all you have to do is put ',' between them\n"
+        "● for example: 12345,12345,12345,etc\n\n"
+        "● The commands are below 🧸"
     )
     
     markup = types.InlineKeyboardMarkup()
     button1 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM CHAT ≈", callback_data='scrap_from_chat')
-    button2 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM BIN IN ALL USER CHATS ≈", callback_data='scrap_from_bin')
-    button3 = types.InlineKeyboardButton("≈ SCRAPPE AMOUNT CC FROM Bank Name IN ALL USER CHATS ≈", callback_data='scrap_amount_cc')
+    button2 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM BIN ", callback_data='scrap_from_bin')
+    button3 = types.InlineKeyboardButton("≈ SCRAPPE AMOUNT Bank Name", callback_data='scrap_amount_cc')
     
-    button4 = types.InlineKeyboardButton("• 𝗗𝗘𝗩", url='https://t.me/Ownerxxxxx')
-    button5 = types.InlineKeyboardButton("⮕", url='https://t.me/Ownerxxxxx')
-    button6 = types.InlineKeyboardButton(" • VENOM", url='https://t.me/Ownerxxxxxx')
+    button4 = types.InlineKeyboardButton("• Developer", url='https://t.me/Ownerxxxxx')
+    button5 = types.InlineKeyboardButton("mass chk bot", url='https://t.me/GSIXTEAM_BOT')
+    button6 = types.InlineKeyboardButton(" • Join Now", url='https://t.me/CHITNGE54')
 
     markup.add(button1)
     markup.add(button2)
@@ -163,22 +163,22 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: call.data == 'back')
 def handle_back(call):
     message_text = (
-        "⌯ Welcome to bot scrap cc\n"
-        "⇾ You can scrape from your username, ID, invitation link, or user chats\n"
-        "⇾ You can scrape from bank name or bin\n"
-        "⇾ You can scrape from more than one bank or bin, all you have to do is put ',' between them\n"
-        "for example: 12345,12345,12345,etc\n\n"
-        "The commands are below 🧸"
+        "● Welcome to bot scrap cc\n"
+        "● You can scrape from your username, ID, invitation link, or user chats\n"
+        "● You can scrape from bank name or bin\n"
+        "● You can scrape from more than one bank or bin, all you have to do is put ',' between them\n"
+        "● for example: 12345,12345,12345,etc\n\n"
+        "● The commands are below 🧸"
     )
 
     markup = types.InlineKeyboardMarkup()
     button1 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM CHAT ≈", callback_data='scrap_from_chat')
-    button2 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM BIN IN ALL USER CHATS ≈", callback_data='scrap_from_bin')
-    button3 = types.InlineKeyboardButton("≈ SCRAPPE AMOUNT CC FROM Bank Name IN ALL USER CHATS ≈", callback_data='scrap_amount_cc')
+    button2 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM BIN ", callback_data='scrap_from_bin')
+    button3 = types.InlineKeyboardButton("≈ SCRAPPE AMOUNT Bank Name ", callback_data='scrap_amount_cc')
     
-    button4 = types.InlineKeyboardButton("• 𝗗𝗘𝗩", url='https://t.me/Ownerxxxxx')
-    button5 = types.InlineKeyboardButton("⮕", url='https://t.me/Ownerxxxxxx')
-    button6 = types.InlineKeyboardButton("• VENOM", url='https://t.me/Ownerxxxxx')
+    button4 = types.InlineKeyboardButton("• Developer", url='https://t.me/Ownerxxxxx')
+    button5 = types.InlineKeyboardButton("mass chk bot", url='https://t.me/GSIXTEAM_BOT')
+    button6 = types.InlineKeyboardButton(" • Join Now", url='https://t.me/CHITNGE54')
 
     markup.add(button1)
     markup.add(button2)
@@ -193,17 +193,17 @@ def handle_scrap_from_chat(call):
         "◎ CC SCRAPPING FROM CHAT\n"
         "• /scr USERNAME LIMIT\n"
         "⇾ EXAMPLE:\n"
-        "    /scr xenscrape 500\n\n"
+        "    /scr CHITNGE54 500\n\n"
         "◎ CC SCRAPPING FROM BIN IN CHAT\n"
         "• /scr USERNAME BIN LIMIT\n"
         "⇾ EXAMPLE:\n"
-        "    /scr xenscrape 500 440393\n"
-        "    /scr xenscrape 500 440393,123456\n\n"
+        "    /scr CHITNGE54 500 440393\n"
+        "    /scr CHITNGE54 500 440393,123456\n\n"
         "◎ CC SCRAPPING FROM Bank name IN CHAT\n"
         "• /scr USERNAME BIN LIMIT\n"
         "⇾ EXAMPLE:\n"
-        "    /scr xenscrape 500 [JPMORGAN]\n"
-        "    /scr xenscrape 500 [JPMORGAN,N.A]\n"
+        "    /scr CHITNGE54 500 [JPMORGAN]\n"
+        "    /scr CHITNGE54 500 [JPMORGAN,N.A]\n"
         "    \n\n"
         "Press Back to return."
     )
@@ -296,6 +296,8 @@ def send_sc_messages(message):
 • Bin ~ {bin[:10]}\n
 
 • Total Found ~ {count}\n
+
+• Join Channel @CHITNGE54\n
 ●●●●●●●●●●●
         ''')
 
@@ -323,6 +325,8 @@ def send_sc_messages(message):
 • Channel ~ {channel_name}
 
 • Total Found ~ {file_len}
+
+• Join Channel @CHITNGE54
 
 ●●●●●●●●●●●"""
 
