@@ -1,384 +1,725 @@
-
-import random
-import datetime
-import re
-import requests
-import json
-import time
-import telebot
 import os
-from genfun import gen_card
+import requests
+import handlers
+
+from aiogram import executor, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from loader import bot,dp
+from data.config import *
+from database import *
+import time
+import logging
 import asyncio
-from telethon import TelegramClient
-from telebot import types
-
-current_year = datetime.datetime.now().year % 100
-current_month = datetime.datetime.now().month
-
-# 
-bot_token = '7771888330:AAGTeKLD0ByMoXSXNA338BWjoJdDVW_qOUQ'
-admin_id = '6191863486'  # 
-api_id = '9615664'  # 
-api_hash = '32a7dd931eea1c701e2da971216b61b1'  # 
-phone_number = '+201153262807'  # 
-cache_file = "bin_cache.json"
-bot_working = True
-
-if os.path.exists(cache_file):
-    with open(cache_file, "r") as file:
-        bin_cache = json.load(file)
-else:
-    bin_cache = {}
-
-def save_cache():
-    with open(cache_file, "w") as file:
-        json.dump(bin_cache, file)
-
-def generate_cards(bin, count, expiry_month=None, expiry_year=None, use_backticks=False):
-    cards = set()
-    while len(cards) < count:
-        try:
-            card_number = bin + str(random.randint(0, 10**(16-len(bin)-1) - 1)).zfill(16-len(bin))
-            if luhn_check(card_number):
-                expiry_date = generate_expiry_date(current_year, current_month, expiry_month, expiry_year)
-                cvv = str(random.randint(0, 999)).zfill(3)
-                card = f"{card_number}|{expiry_date['month']}|{expiry_date['year']}|{cvv}"
-                if use_backticks:
-                    card = f"`{card}`"
-                cards.add(card)
-        except ValueError:
-            continue
-    return list(cards)
-
-def generate_expiry_date(current_year, current_month, expiry_month=None, expiry_year=None):
-    month = str(expiry_month if expiry_month and expiry_month != 'xx' else random.randint(1, 12)).zfill(2)
-    year = str(expiry_year if expiry_year and expiry_year != 'xx' else random.randint(current_year, current_year + 5)).zfill(2)
-    if int(year) == current_year and int(month) < current_month:
-        month = str(random.randint(current_month, 12)).zfill(2)
-    return {"month": month, "year": year}
-
-def luhn_check(number):
-    def digits_of(n):
-        return [int(d) for d in str(n)]
-    digits = digits_of(number)
-    odd_digits = digits[-1::-2]
-    even_digits = digits[-2::-2]
-    checksum = sum(odd_digits)
-    for d in even_digits:
-        checksum += sum(digits_of(d * 2))
-    return checksum % 10 == 0
-
-def get_bin_info(bin):
-    if bin in bin_cache:
-        return bin_cache[bin]
-    
-    try:
-        response = requests.get(f"https://lookup.binlist.net/{bin[:6]}")
-        response.raise_for_status()
-        data = response.json()
-        info = {
-            "scheme": data.get("scheme", "").upper(),
-            "type": data.get("type", "").upper(),
-            "brand": data.get("brand", "").upper(),
-            "bank": data.get("bank", {}).get("name", "").upper(),
-            "country": data.get("country", {}).get("name", "").upper(),
-            "emoji": data.get("country", {}).get("emoji", "")
+log = logging.basicConfig(level=logging.INFO)
+import csv
+import sys
+BINS_DICT = {}
+SH_GATE = {}
+def get_iso(country_code):
+    x = {'Afghanistan': 'AF',
+         'Albania': 'AL',
+         'Algeria': 'DZ',
+         'American Samoa': 'AS',
+         'Andorra': 'AD',
+         'Angola': 'AO',
+         'Anguilla': 'AI',
+         'Antarctica': 'AQ',
+         'Antigua and Barbuda': 'AG',
+         'Argentina': 'AR',
+         'Armenia': 'AM',
+         'Aruba': 'AW',
+         'Australia': 'AU',
+         'Austria': 'AT',
+         'Azerbaijan': 'AZ',
+         'Bahamas': 'BS',
+         'Bahrain': 'BH',
+         'Bangladesh': 'BD',
+         'Barbados': 'BB',
+         'Belarus': 'BY',
+         'Belgium': 'BE',
+         'Belize': 'BZ',
+         'Benin': 'BJ',
+         'Bermuda': 'BM',
+         'Bhutan': 'BT',
+         'Bolivia, Plurinational State of': 'BO',
+         'Bonaire, Sint Eustatius and Saba': 'BQ',
+         'Bosnia and Herzegovina': 'BA',
+         'Botswana': 'BW',
+         'Bouvet Island': 'BV',
+         'Brazil': 'BR',
+         'British Indian Ocean Territory': 'IO',
+         'Brunei Darussalam': 'BN',
+         'Bulgaria': 'BG',
+         'Burkina Faso': 'BF',
+         'Burundi': 'BI',
+         'Cambodia': 'KH',
+         'Cameroon': 'CM',
+         'Canada': 'CA',
+         'Cape Verde': 'CV',
+         'Cayman Islands': 'KY',
+         'Central African Republic': 'CF',
+         'Chad': 'TD',
+         'Chile': 'CL',
+         'China': 'CN',
+         'Christmas Island': 'CX',
+         'Cocos (Keeling) Islands': 'CC',
+         'Colombia': 'CO',
+         'Comoros': 'KM',
+         'Congo': 'CG',
+         'Congo, the Democratic Republic of the': 'CD',
+         'Cook Islands': 'CK',
+         'Costa Rica': 'CR',
+         'Country name': 'Code',
+         'Croatia': 'HR',
+         'Cuba': 'CU',
+         'Curaçao': 'CW',
+         'Cyprus': 'CY',
+         'Czech Republic': 'CZ',
+         "Côte d'Ivoire": 'CI',
+         'Denmark': 'DK',
+         'Djibouti': 'DJ',
+         'Dominica': 'DM',
+         'Dominican Republic': 'DO',
+         'Ecuador': 'EC',
+         'Egypt': 'EG',
+         'El Salvador': 'SV',
+         'Equatorial Guinea': 'GQ',
+         'Eritrea': 'ER',
+         'Estonia': 'EE',
+         'Ethiopia': 'ET',
+         'Falkland Islands (Malvinas)': 'FK',
+         'Faroe Islands': 'FO',
+         'Fiji': 'FJ',
+         'Finland': 'FI',
+         'France': 'FR',
+         'French Guiana': 'GF',
+         'French Polynesia': 'PF',
+         'French Southern Territories': 'TF',
+         'Gabon': 'GA',
+         'Gambia': 'GM',
+         'Georgia': 'GE',
+         'Germany': 'DE',
+         'Ghana': 'GH',
+         'Gibraltar': 'GI',
+         'Greece': 'GR',
+         'Greenland': 'GL',
+         'Grenada': 'GD',
+         'Guadeloupe': 'GP',
+         'Guam': 'GU',
+         'Guatemala': 'GT',
+         'Guernsey': 'GG',
+         'Guinea': 'GN',
+         'Guinea-Bissau': 'GW',
+         'Guyana': 'GY',
+         'Haiti': 'HT',
+         'Heard Island and McDonald Islands': 'HM',
+         'Holy See (Vatican City State)': 'VA',
+         'Honduras': 'HN',
+         'Hong Kong': 'HK',
+         'Hungary': 'HU',
+         'ISO 3166-2:GB': '(.uk)',
+         'Iceland': 'IS',
+         'India': 'IN',
+         'Indonesia': 'ID',
+         'Iran, Islamic Republic of': 'IR',
+         'Iraq': 'IQ',
+         'Ireland': 'IE',
+         'Isle of Man': 'IM',
+         'Israel': 'IL',
+         'Italy': 'IT',
+         'Jamaica': 'JM',
+         'Japan': 'JP',
+         'Jersey': 'JE',
+         'Jordan': 'JO',
+         'Kazakhstan': 'KZ',
+         'Kenya': 'KE',
+         'Kiribati': 'KI',
+         "Korea, Democratic People's Republic of": 'KP',
+         'Korea, Republic of': 'KR',
+         'Kuwait': 'KW',
+         'Kyrgyzstan': 'KG',
+         "Lao People's Democratic Republic": 'LA',
+         'Latvia': 'LV',
+         'Lebanon': 'LB',
+         'Lesotho': 'LS',
+         'Liberia': 'LR',
+         'Libya': 'LY',
+         'Liechtenstein': 'LI',
+         'Lithuania': 'LT',
+         'Luxembourg': 'LU',
+         'Macao': 'MO',
+         'Macedonia, the former Yugoslav Republic of': 'MK',
+         'Madagascar': 'MG',
+         'Malawi': 'MW',
+         'Malaysia': 'MY',
+         'Maldives': 'MV',
+         'Mali': 'ML',
+         'Malta': 'MT',
+         'Marshall Islands': 'MH',
+         'Martinique': 'MQ',
+         'Mauritania': 'MR',
+         'Mauritius': 'MU',
+         'Mayotte': 'YT',
+         'Mexico': 'MX',
+         'Micronesia, Federated States of': 'FM',
+         'Moldova, Republic of': 'MD',
+         'Monaco': 'MC',
+         'Mongolia': 'MN',
+         'Montenegro': 'ME',
+         'Montserrat': 'MS',
+         'Morocco': 'MA',
+         'Mozambique': 'MZ',
+         'Myanmar': 'MM',
+         'Namibia': 'NA',
+         'Nauru': 'NR',
+         'Nepal': 'NP',
+         'Netherlands': 'NL',
+         'New Caledonia': 'NC',
+         'New Zealand': 'NZ',
+         'Nicaragua': 'NI',
+         'Niger': 'NE',
+         'Nigeria': 'NG',
+         'Niue': 'NU',
+         'Norfolk Island': 'NF',
+         'Northern Mariana Islands': 'MP',
+         'Norway': 'NO',
+         'Oman': 'OM',
+         'Pakistan': 'PK',
+         'Palau': 'PW',
+         'Palestine, State of': 'PS',
+         'Panama': 'PA',
+         'Papua New Guinea': 'PG',
+         'Paraguay': 'PY',
+         'Peru': 'PE',
+         'Philippines': 'PH',
+         'Pitcairn': 'PN',
+         'Poland': 'PL',
+         'Portugal': 'PT',
+         'Puerto Rico': 'PR',
+         'Qatar': 'QA',
+         'Romania': 'RO',
+         'Russian Federation': 'RU',
+         'Rwanda': 'RW',
+         'Réunion': 'RE',
+         'Saint Barthélemy': 'BL',
+         'Saint Helena, Ascension and Tristan da Cunha': 'SH',
+         'Saint Kitts and Nevis': 'KN',
+         'Saint Lucia': 'LC',
+         'Saint Martin (French part)': 'MF',
+         'Saint Pierre and Miquelon': 'PM',
+         'Saint Vincent and the Grenadines': 'VC',
+         'Samoa': 'WS',
+         'San Marino': 'SM',
+         'Sao Tome and Principe': 'ST',
+         'Saudi Arabia': 'SA',
+         'Senegal': 'SN',
+         'Serbia': 'RS',
+         'Seychelles': 'SC',
+         'Sierra Leone': 'SL',
+         'Singapore': 'SG',
+         'Sint Maarten (Dutch part)': 'SX',
+         'Slovakia': 'SK',
+         'Slovenia': 'SI',
+         'Solomon Islands': 'SB',
+         'Somalia': 'SO',
+         'South Africa': 'ZA',
+         'South Georgia and the South Sandwich Islands': 'GS',
+         'South Sudan': 'SS',
+         'Spain': 'ES',
+         'Sri Lanka': 'LK',
+         'Sudan': 'SD',
+         'Suriname': 'SR',
+         'Svalbard and Jan Mayen': 'SJ',
+         'Swaziland': 'SZ',
+         'Sweden': 'SE',
+         'Switzerland': 'CH',
+         'Syrian Arab Republic': 'SY',
+         'Taiwan, Province of China': 'TW',
+         'Tajikistan': 'TJ',
+         'Tanzania, United Republic of': 'TZ',
+         'Thailand': 'TH',
+         'Timor-Leste': 'TL',
+         'Togo': 'TG',
+         'Tokelau': 'TK',
+         'Tonga': 'TO',
+         'Trinidad and Tobago': 'TT',
+         'Tunisia': 'TN',
+         'Turkey': 'TR',
+         'Turkmenistan': 'TM',
+         'Turks and Caicos Islands': 'TC',
+         'Tuvalu': 'TV',
+         'Uganda': 'UG',
+         'Ukraine': 'UA',
+         'United Arab Emirates': 'AE',
+         'United Kingdom': 'GB',
+         'United States': 'US',
+         'United States Minor Outlying Islands': 'UM',
+         'Uruguay': 'UY',
+         'Uzbekistan': 'UZ',
+         'Vanuatu': 'VU',
+         'Venezuela, Bolivarian Republic of': 'VE',
+         'Viet Nam': 'VN',
+         'Virgin Islands, British': 'VG',
+         'Virgin Islands, U.S.': 'VI',
+         'Wallis and Futuna': 'WF',
+         'Western Sahara': 'EH',
+         'Yemen': 'YE',
+         'Zambia': 'ZM',
+         'Zimbabwe': 'ZW',
+         'Åland Islands': 'AX'}
+    for y in x:
+        if country_code in x[y]:
+            return y.upper()
+with open('bins_all.csv', mode='r', encoding='utf-8') as inp:
+    reader = csv.reader(inp)
+    length = 366388
+    current_index = 0
+    for x in reader:
+        current_index += 1
+        text = "\r Now: {0} - Total: {1} - Percent: {2}% ".format(current_index, length, int(round(current_index / length * 100)))
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        x2 = {
+            "country": get_iso(x[1]),
+            "iso": x[1],
+            "flag": x[2],
+            "vendor": x[3],
+            "type": x[4],
+            "level": x[5],
+            "bank_name": x[6],
+            "prepaid": True if x[5] == "PREPAID" else False
         }
-        bin_cache[bin] = info
-        save_cache()
-        return info
-    except Exception as e:
-        print(f"Error fetching BIN info: {e}")
-        return {
-            "scheme": "",
-            "type": "",
-            "brand": "",
-            "bank": "",
-            "country": "",
-            "emoji": ""
-        }
+        BINS_DICT[x[0]] = x2
 
-# تهيئة البوت
-bot = telebot.TeleBot(bot_token, parse_mode='HTML')
 
-async def get_last_messages(username, limit, bin=None):
-    async with TelegramClient(phone_number, api_id, api_hash) as client:
-        try:
-            entity = await client.get_entity(username)
-            messages = await client.get_messages(entity, limit=limit)
+if len(BINS_DICT) < 1:
+    log.critical("Bins Not Imported.")
+    sys.exit(1)
+# BOT INFO
+@dp.message_handler(commands=['admins'], commands_prefix=PREFIX)
+async def helpstr(message: types.Message):
 
-            matching_texts = []
-            card_pattern = r'(\d{15,16})[^0-9]+([0-9]{1,2})[^0-9]+([0-9]{2,4})[^0-9]+([0-9]{3,4})'
+  group = message.chat.id
+  ug = message.chat.type
+  if "supergroup" in ug or "group" in ug:
+    members = await bot.get_chat_administrators(group)
+    members2 = ""
+    for x in members:
+      if "creator" in {x.status}:
+        members2 += (
+          f"<a href='tg://user?id={x.user.id}'>{x.user.username}</a>\n"
+        )
+      else:
 
-            for message in messages:
-                if message.text:
-                    match = re.search(card_pattern, message.text)
-                    if match:
-                        formatted_text = f"{match.group(1)}|{match.group(2)}|{match.group(3)}|{match.group(4)}"
-                        if bin is None or formatted_text.startswith(bin):
-                            matching_texts.append(formatted_text)
+        members2 += (
+          f"<a href='tg://user?id={x.user.id}'>{x.user.username}</a>\n")
+    await message.reply(members2)
+  else:
+    await message.reply("""Cannot Use this command in Private Chat""",
+                        disable_web_page_preview=True)
 
-            return "\n".join(matching_texts), entity.title
-        except Exception as e:
-            print(f"Error: {e}")
-            return None, None
 
-def save_to_file(text):
-    if os.path.exists('Original_Scrap.txt'):
-        os.remove('Original_Scrap.txt')
-    with open('Original_Scrap.txt', 'w') as file:
-        file.write(text)
+@dp.message_handler(commands=['id'], commands_prefix=PREFIX)
+async def helpstr(message: types.Message):
+  user_id = message.text
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    name = message.from_user.first_name
-    welcome_message = (
-        f"● Welcome, {name}!\n"
-        "● Welcome to bot scrap cc\n\n"
-        "● You can scrape from your username, ID, invitation link, or user chats\n"
-        "● You can scrape from bank name or bin\n"
-        "● You can scrape from more than one bank or bin, all you have to do is put ',' between them\n"
-        "● for example: 12345,12345,12345,etc\n\n"
-        "● The commands are below 🧸"
-    )
-    
-    markup = types.InlineKeyboardMarkup()
-    button1 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM CHAT ≈", callback_data='scrap_from_chat')
-    button2 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM BIN ", callback_data='scrap_from_bin')
-    button3 = types.InlineKeyboardButton("≈ SCRAPPE AMOUNT Bank Name", callback_data='scrap_amount_cc')
-    
-    button4 = types.InlineKeyboardButton("• Developer", url='https://t.me/Ownerxxxxx')
-    button5 = types.InlineKeyboardButton("mass chk bot", url='https://t.me/GSIXTEAM_BOT')
-    button6 = types.InlineKeyboardButton(" • Join Now", url='https://t.me/CHITNGE54')
+  if len(user_id) == 3:
+    query = message.from_user.id
 
-    markup.add(button1)
-    markup.add(button2)
-    markup.add(button3)
-    markup.row(button4, button5, button6)
+  else:
+    query = message.text[len('/id '):]
 
-    try:
-        bot.send_message(message.chat.id, welcome_message, reply_markup=markup)  # بدون parse_mode='HTML'
-    except Exception as e:
-        print(f"Error sending welcome message: {e}")
-@bot.callback_query_handler(func=lambda call: call.data == 'back')
-def handle_back(call):
-    message_text = (
-        "● Welcome to bot scrap cc\n"
-        "● You can scrape from your username, ID, invitation link, or user chats\n"
-        "● You can scrape from bank name or bin\n"
-        "● You can scrape from more than one bank or bin, all you have to do is put ',' between them\n"
-        "● for example: 12345,12345,12345,etc\n\n"
-        "● The commands are below 🧸"
-    )
+  try:
 
-    markup = types.InlineKeyboardMarkup()
-    button1 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM CHAT ≈", callback_data='scrap_from_chat')
-    button2 = types.InlineKeyboardButton("≈ CC SCRAPPING FROM BIN ", callback_data='scrap_from_bin')
-    button3 = types.InlineKeyboardButton("≈ SCRAPPE AMOUNT Bank Name ", callback_data='scrap_amount_cc')
-    
-    button4 = types.InlineKeyboardButton("• Developer", url='https://t.me/Ownerxxxxx')
-    button5 = types.InlineKeyboardButton("mass chk bot", url='https://t.me/GSIXTEAM_BOT')
-    button6 = types.InlineKeyboardButton(" • Join Now", url='https://t.me/CHITNGE54')
+    km = await bot.get_chat(query)
+    q1 = km.first_name
+    q2 = km.last_name
+    if q2 == None:
+      q2 = ""
+    q3 = km.bio
+    q4 = km.username
+    q5 = km.id
+    await message.reply(f"""<b>
+ID : <code>{q5}</code>
+Name : <i>{q1} {q2}</i>
+Bio : <i>{q3}</i>
+UserName: <i>{q4}</i> </b>
+""")
 
-    markup.add(button1)
-    markup.add(button2)
-    markup.add(button3)
-    markup.row(button4, button5, button6)
+  except Exception as e:
+    await message.reply(e)
 
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=message_text, reply_markup=markup, parse_mode='HTML')
+@dp.message_handler(
+  commands=['cmd', 'cmds', 'command', 'commands'],
+  commands_prefix=PREFIX)
+async def helpstr(message: types.Message):
+  text = f"""
+<b>
+/status to check group status
+/check check your own id
+/admins
 
-@bot.callback_query_handler(func=lambda call: call.data == 'scrap_from_chat')
-def handle_scrap_from_chat(call):
-    message_text = (
-        "◎ CC SCRAPPING FROM CHAT\n"
-        "• /scr USERNAME LIMIT\n"
-        "⇾ EXAMPLE:\n"
-        "    /scr CHITNGE54 500\n\n"
-        "◎ CC SCRAPPING FROM BIN IN CHAT\n"
-        "• /scr USERNAME BIN LIMIT\n"
-        "⇾ EXAMPLE:\n"
-        "    /scr CHITNGE54 500 440393\n"
-        "    /scr CHITNGE54 500 440393,123456\n\n"
-        "◎ CC SCRAPPING FROM Bank name IN CHAT\n"
-        "• /scr USERNAME BIN LIMIT\n"
-        "⇾ EXAMPLE:\n"
-        "    /scr CHITNGE54 500 [JPMORGAN]\n"
-        "    /scr CHITNGE54 500 [JPMORGAN,N.A]\n"
-        "    \n\n"
-        "Press Back to return."
-    )
-    markup = types.InlineKeyboardMarkup()
-    back_button = types.InlineKeyboardButton("Back", callback_data='back')
-    markup.add(back_button)
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=message_text, reply_markup=markup)
+/clean (text to extract cc)
+/bin xxxxxx  to check bin 
+/fake or /us generat fake data
+/ipgen (amount) generate ip list
+/gen cc gen
+/phone (number) 
+/ip (check ip risk score)
+/sk sk_live_xxx to check sk keys (with balance)
+/buy to buy bot 
+/inf to check group id 
 
-@bot.callback_query_handler(func=lambda call: call.data == 'scrap_from_bin')
-def handle_scrap_from_bin(call):
-    message_text = (
-        "◎ CC SCRAPPING FROM BIN IN ALL USER CHATS\n"
-        "• /scr BIN,BIN\n"
-        "⇾ EXAMPLE:\n"
-        "    /scr 440393\n"
-        "    /scr 440393,123456\n\n"
-        "◎ CC SCRAPPING FROM Bank Name IN ALL USER CHATS\n"
-        "• /scr [Bank]\n"
-        "⇾ EXAMPLE:\n"
-        "    /scr [JPMORGAN]\n"
-        "    /scr [JPMORGAN,N.A]\n\n"
-        "Press Back to return."
-    )
-    markup = types.InlineKeyboardMarkup()
-    back_button = types.InlineKeyboardButton("Back", callback_data='back')
-    markup.add(back_button)
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=message_text, reply_markup=markup)
+[proxy cmds]
 
-@bot.callback_query_handler(func=lambda call: call.data == 'scrap_amount_cc')
-def handle_scrap_amount_cc(call):
-    message_text = (
-        "◎ SCRAPPE AMOUNT CC FROM Bank Name IN ALL USER CHATS\n"
-        "• /scr [Bank]\n"
-        "⇾ EXAMPLE:\n"
-        "    /scr [JPMORGAN] 500\n"
-        "    /scr [JPMORGAN,N.A] 500\n\n"
-        "◎ SCRAPPE AMOUNT CC FROM BIN IN ALL USER CHATS\n"
-        "• /scr [BIN]\n"
-        "⇾ EXAMPLE:\n"
-        "    /scr [440393] 500\n"
-        "    /scr [440393,123456] 500\n\n"
-        "Press Back to return."
-    )
-    markup = types.InlineKeyboardMarkup()
-    back_button = types.InlineKeyboardButton("Back", callback_data='back')
-    markup.add(back_button)
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=message_text, reply_markup=markup)
+/http
+/socks4
+/socks5
 
-@bot.callback_query_handler(func=lambda call: True)
-def handle_query(call):
-    if call.data == 'specific_chat':
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="You selected: SCRAPPING FROM Specific chat")
-    elif call.data == 'all_user_chats':
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="You selected: SCRAPPING FROM ALL USER CHATS")
-    elif call.data == 'amountcc':
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="You selected: SCRAPPE AMOUNTCC")
+[translator]
+/tr (language_code) text
+/voice (language_code) text
 
-@bot.message_handler(commands=['scr'])
-def send_sc_messages(message):
-    chat_id = message.chat.id
-    initial_message = bot.reply_to(message, "Scraping Started...⏳")
-    command_parts = message.text.split()
+[admin cmds]
 
-    if len(command_parts) < 3:
-        bot.edit_message_text(chat_id=chat_id, message_id=initial_message.message_id, 
-                              text="Command format: /scr [username/bin] [limit]")
-        return
+/adduser
+/deluser
+/addadmin
+/deladmin
+/approve
+/revoke
 
-    input_data = command_parts[1]
-    limit = int(command_parts[2])
+</b>
+<b> Bot made by: <a href='{OWNER_LINK}'> {OWNER_NAME} </a> </b>"""
+  await message.reply(text, disable_web_page_preview=True)
 
-    if input_data.isdigit() and len(input_data) >= 6:  # نفترض أن البين يتكون من 6 أرقام على الأقل
-        # سكرب من بين
-        bin = input_data
-        count = limit
 
-        cards = generate_cards(bin, count)
-        file_path = "Original_Scrap.txt"
+@dp.message_handler(
+  commands=['start', 'help'],
+  commands_prefix=PREFIX)
+async def helpstr(message: types.Message):
+  button1 = InlineKeyboardButton(text="My Account", callback_data="mee")
+  button2 = InlineKeyboardButton(text="Gateway", callback_data="back")
+  button3 = InlineKeyboardButton(text="Tools", callback_data="other")
+  button4 = InlineKeyboardButton(text="Channel", url=f"{CHANNEL}")
+  button5 = InlineKeyboardButton(text="Group", url=f"{GROUP}")
+  button6 = InlineKeyboardButton(text="Buy Here", callback_data="buy1")
+  button7 = InlineKeyboardButton(text="Close", callback_data="lose")
 
-        with open(file_path, "w") as file:
-            file.write("\n".join(cards))
+  keyboard_inline = InlineKeyboardMarkup().add(button1).add(
+    button2, button3).add(button6).add(button4, button5).add(button7)
+  text = f"<b> Hii {message.from_user.mention} Your User id is <code> {message.from_user.id}</code></b>"
+  await message.reply(text,
+                      reply_markup=keyboard_inline,
+                      disable_web_page_preview=True)
 
-        bin_info = get_bin_info(bin[:6])
 
-        additional_info = (f'''
-            ●●●●●●●●●●●
+# ===========================================================================handler========================================================================
 
-• Name ~ Original Scraper 🧡, 
 
-• Bin ~ {bin[:10]}\n
+@dp.callback_query_handler(text=["mee", "back2", "lose"])
+async def process_cart(call: types.CallbackQuery):
 
-• Total Found ~ {count}\n
+  original = call.message.reply_to_message.from_user.id
+  cc = call.get_current()
+  id = cc.from_user.id
+  if id == original:
 
-• Join Channel @CHITNGE54\n
-●●●●●●●●●●●
-        ''')
+    if call.data == "mee":
 
-        with open(file_path, "rb") as file:
-            bot.send_document(chat_id, file, caption=additional_info)
-            bot.delete_message(chat_id=chat_id, message_id=initial_message.message_id)
-    else:
-        # سكرب من قناة
-        username = input_data
+      tec = f"""<b>
+Your Account Info:
+━━━━━━━━━
+ID: <code>{call.message.reply_to_message.from_user.id}</code>
+Name: {call.message.reply_to_message.from_user.first_name}
+Username: {call.message.reply_to_message.from_user.mention}
+Plan: {ok(call.message.reply_to_message.from_user.id)} 
+━━━━━━━━━
+<i>Expire on </i> = <b>{(fetch_expiry_date(id))}</b>
+<i>Days_left </i> = <b>{check_expiry_days(id)}</b>
+</b>
+"""
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+      button5 = InlineKeyboardButton(text="🔚", callback_data="back2")
 
-        messages_text, channel_name = loop.run_until_complete(get_last_messages(username, limit))
+      keyboard_inline = InlineKeyboardMarkup().add(button5)
 
-        if channel_name:
-            save_to_file(messages_text)
+      return await call.message.edit_text(tec,
+                                          reply_markup=keyboard_inline,
+                                          disable_web_page_preview=True)
 
-            file_len = len(messages_text.split('\n')) if messages_text else 0
-            captain_info = f"""
-●●●●●●●●●●●
+    if call.data == "back2":
+      button1 = InlineKeyboardButton(text="My Account", callback_data="mee")
+      button2 = InlineKeyboardButton(text="Gateway", callback_data="back")
+      button3 = InlineKeyboardButton(text="Tools", callback_data="other")
+      button4 = InlineKeyboardButton(text="Channel", url=f"{CHANNEL}")
+      button5 = InlineKeyboardButton(text="Group", url=f"{GROUP}")
+      button6 = InlineKeyboardButton(text="Buy Here", callback_data="buy1")
+      button7 = InlineKeyboardButton(text="Close", callback_data="lose")
 
-• Name ~ Original Scraper 🧡, 
+      keyboard_inline = InlineKeyboardMarkup().add(button1).add(
+        button2, button3).add(button6).add(button4, button5).add(button7)
+      text = f"<b> Hii {call.message.reply_to_message.from_user.mention} Your User id is <code> {call.message.reply_to_message.from_user.id}</code> </b>"
+      await call.message.edit_text(text,
+                                   reply_markup=keyboard_inline,
+                                   disable_web_page_preview=True)
 
-• Channel ~ {channel_name}
+    if call.data == "lose":
 
-• Total Found ~ {file_len}
+      await call.message.edit_text("Enjoy Baby 🧸.")
 
-• Join Channel @CHITNGE54
+  else:
 
-●●●●●●●●●●●"""
+    return await call.answer(
+      "❌ Access denied, only the user who used the command can navigate the buttons. ❗️",
+      show_alert=True)
 
-            with open('Original_Scrap.txt', 'rb') as file:
-                markup = types.InlineKeyboardMarkup()
-                
-                dev_button = telebot.types.InlineKeyboardButton(text="𝗗𝗘𝗩", url='https://t.me/Ownerxxxxx')
-                markup.add(dev_button)
-                bot.send_document(chat_id, file, caption=captain_info, parse_mode='none', reply_markup=markup)
-                bot.delete_message(chat_id=chat_id, message_id=initial_message.message_id)
-        else:
-            bot.edit_message_text(chat_id=chat_id, message_id=initial_message.message_id, 
-                                  text="Failed to get messages from the channel.")
 
-@bot.message_handler(commands=['gen'])
-def generate_card(message):
-    if bot_working:
-        chat_id = message.chat.id
-        try:
-            initial_message = bot.reply_to(message, "Generating Started...⏳")
-            card_info = message.text.split('/gen ', 1)[1]
+@dp.callback_query_handler(
+  text=["buy1", "close1", "1_MONTH1", "1_WEEK1", "1_DAY1"])
+async def process_cart(call: types.CallbackQuery):
 
-            def multi_explode(delimiters, string):
-                pattern = '|'.join(map(re.escape, delimiters))
-                return re.split(pattern, string)
-        
-            split_values = multi_explode([":", "|", "⋙", " ", "/"], card_info)
-            bin_value = ""
-            mes_value = ""
-            ano_value = ""
-            cvv_value = ""
-            
-            if len(split_values) >= 1:
-                bin_value = re.sub(r'[^0-9]', '', split_values[0])
-            if len(split_values) >= 2:
-                mes_value = re.sub(r'[^0-9]', '', split_values[1])
-            if len(split_values) >= 3:
-                ano_value = re.sub(r'[^0-9]', '', split_values[2])
-            if len(split_values) >= 4:
-                cvv_value = re.sub(r'[^0-9]', '', split_values[3])
-                
-            cards_data = ""
-            f = 0
-            while f < 10:
-                card_number, exp_m, exp_y, cvv = gen_card(bin_value, mes_value, ano_value, cvv_value)
-                cards_data += f"<code>{card_number}|{exp_m}|{exp_y}|{cvv}</code>\n"
-                f += 1
-                
-            bot.edit_message_text(chat_id=chat_id, message_id=initial_message.message_id, text=cards_data, parse_mode='HTML')
-        except Exception as e:
-            bot.edit_message_text(chat_id=chat_id, message_id=initial_message.message_id, text=f"An error occurred: {e}")
-    else:
-        pass
+  original = call.message.reply_to_message.from_user.id
+  cc = call.get_current()
+  id = cc.from_user.id
+  if id == original:
 
-bot.infinity_polling()
+    if call.data == "buy1":
+      button1 = InlineKeyboardButton(text="30 Days", callback_data="1_MONTH1")
+      button2 = InlineKeyboardButton(text="15 Days", callback_data="1_WEEK1")
+      button3 = InlineKeyboardButton(text="Day", callback_data="1_DAY1")
+      button4 = InlineKeyboardButton(text="🔙", callback_data="back2")
+      button5 = InlineKeyboardButton(text="🔚", callback_data="lose")
+
+      keyboard_inline = InlineKeyboardMarkup().add(button1).add(button2).add(
+        button3).add(button4, button5)
+
+      return await call.message.edit_text("""<b>Premium Membership Price
+━━━━━━━━━━━━━
+30 Days >  15$
+
+By: <a href='tg://user?id=5579729798'>⏤͟͞B3</a>
+</b>""",
+                                          reply_markup=keyboard_inline,
+                                          disable_web_page_preview=True)
+
+    elif call.data == "close1":
+      await call.message.edit_text("Enjoy Baby 🧸.")
+
+    elif call.data == "1_MONTH1":
+      button1 = InlineKeyboardButton(text="🔚", callback_data="lose")
+      button2 = InlineKeyboardButton(text="🔙", callback_data="buy1")
+      keyboard_inline = InlineKeyboardMarkup().add(button2, button1)
+      text = f"""Payment Method: Crypto
+<b>Payable: 15.00 USD | 15$  </b>
+
+want any other crypto contact <a href='tg://user?id=5579729798'>⏤͟͞B3</a>
+__________________________
+You pay to an individual.
+After payment Take SS and Send it to <a href='tg://user?id=5579729798'>⏤͟͞B3</a>
+
+<b>⚠️NOTE⚠️ date,time of payment and amount  must be clear in SS </b>
+    """
+
+      await call.message.edit_text(text, reply_markup=keyboard_inline)
+
+    elif call.data == "1_WEEK1":
+      button1 = InlineKeyboardButton(text="🔚", callback_data="lose")
+      button2 = InlineKeyboardButton(text="🔙", callback_data="buy1")
+      keyboard_inline = InlineKeyboardMarkup().add(button2, button1)
+
+      text = f"""
+Payment Method: Crypto
+<b>Payable: 8.00 USD | 8$  </b>
+
+<b>⚠️NOTE⚠️ date,time of payment and amount  must be clear in SS </b>"""
+
+      await call.message.edit_text(text, reply_markup=keyboard_inline)
+
+    elif call.data == "1_DAY1":
+      button1 = InlineKeyboardButton(text="🔚", callback_data="lose")
+      button2 = InlineKeyboardButton(text="🔙", callback_data="buy1")
+      keyboard_inline = InlineKeyboardMarkup().add(button2, button1)
+
+      text = f"""
+Payment Method: Crypto
+<b>Payable: 3.00 USD | 3$  </b>
+
+Payment details:
+<b>paying 3$ to {OWNER_NAME} for checker  </b>
+
+want any other crypto contact {OWNER_NAME}
+__________________________
+You pay to an individual.
+After payment Take SS and Send it to {OWNER_NAME}
+
+<b>⚠️NOTE⚠️ date,time of payment and amount  must be clear in SS </b>"""
+
+      await call.message.edit_text(text, reply_markup=keyboard_inline)
+
+  else:
+
+    return await call.answer(
+      "❌ Access denied, only the user who used the command can navigate the buttons. ❗️",
+      show_alert=True)
+
+
+# ------------------------------------------------------buy-------------------------------------
+@dp.message_handler(commands=['plan', 'plans', 'buy'], commands_prefix=PREFIX)
+async def infobbkc(message: types.Message):
+
+  m = message.from_user.id
+  kc = ok(m)
+  if "OWNER" in kc:
+    button1 = InlineKeyboardButton(text="🔚", callback_data="lose")
+    keyboard_inline = InlineKeyboardMarkup().add(button1)
+    return await message.reply('''<b>how can a owner buy his own bot :)</b>''',
+                               reply_markup=keyboard_inline)
+  elif "PAID" in kc:
+    button1 = InlineKeyboardButton(text="🔚", callback_data="lose")
+    keyboard_inline = InlineKeyboardMarkup().add(button1)
+    return await message.reply(
+      f'''<a href="tg://user?id={m}">{message.from_user.first_name}</a> no need to buy you are alredy a premium member''',
+      reply_markup=keyboard_inline)
+  else:
+
+    button1 = InlineKeyboardButton(text="⚡️plans⚡️", callback_data="buy1")
+    button2 = InlineKeyboardButton(text="🔚", callback_data="lose")
+
+    keyboard_inline = InlineKeyboardMarkup().add(button1).add(button2)
+    return await message.reply(
+      """<b>click the below button to see my plans</b>""",
+      reply_markup=keyboard_inline,
+      disable_web_page_preview=True)
+
+
+@dp.message_handler(commands=['http'], commands_prefix=PREFIX)
+async def example_func(message: types.Message):
+
+  import requests
+  proxyrequest = requests.get(
+    "https://api.proxyscrape.com?request=getproxies&proxytype=http")
+  proxyrequest_format = proxyrequest.text.strip()
+  proxyrequest_format = proxyrequest_format.replace("\r", "")
+  list_proxies = list(proxyrequest_format.split("\n"))
+
+  with open("http.txt", "w") as proxywrite:
+    for proxy in list_proxies:
+      proxywrite.write("%s\n" % proxy)
+
+  oo = "http.txt"
+  md = open(oo, "rb")
+  await message.reply_document(document=md,
+                               caption=f"""
+<b>Success! Done ✅! </b>
+""")
+  os.remove(oo)
+
+
+@dp.message_handler(commands=['Socks4'], commands_prefix=PREFIX)
+async def example_func(message: types.Message):
+
+  import requests
+  proxyrequest = requests.get(
+    "https://api.proxyscrape.com?request=getproxies&proxytype=socks4")
+  proxyrequest_format = proxyrequest.text.strip()
+  proxyrequest_format = proxyrequest_format.replace("\r", "")
+  list_proxies = list(proxyrequest_format.split("\n"))
+
+  with open("socks4.txt", "w") as proxywrite:
+    for proxy in list_proxies:
+      proxywrite.write("%s\n" % proxy)
+
+  oo = "socks4.txt"
+  md = open(oo, "rb")
+  await message.reply_document(document=md,
+                               caption=f"""
+<b>Success! Done ✅! </b>
+""")
+  os.remove(oo)
+
+
+@dp.message_handler(commands=['Socks5'], commands_prefix=PREFIX)
+async def example_func(message: types.Message):
+
+  import requests
+  proxyrequest = requests.get(
+    "https://api.proxyscrape.com?request=getproxies&proxytype=socks5")
+  proxyrequest_format = proxyrequest.text.strip()
+  proxyrequest_format = proxyrequest_format.replace("\r", "")
+  list_proxies = list(proxyrequest_format.split("\n"))
+
+  with open("socks5.txt", "w") as proxywrite:
+    for proxy in list_proxies:
+      proxywrite.write("%s\n" % proxy)
+
+  oo = "socks5.txt"
+  md = open(oo, "rb")
+  await message.reply_document(document=md,
+                               caption=f"""
+<b>Success! Done ✅! </b>
+""")
+  os.remove(oo)
+
+
+@dp.message_handler(commands=['inf'], commands_prefix=PREFIX)
+async def example_func(message: types.Message):
+  ug = message.chat.id
+  name = message.chat.full_name
+  await message.reply(f"{name}'s id <code>{ug}</code>")
+
+
+# ====================================================================info====================================================================
+# ------------------------------------------------------info-------------------------------------
+@dp.message_handler(commands=['info', 'id', 'me'], commands_prefix=PREFIX)
+async def info(message: types.Message):
+
+  if message.reply_to_message:
+    user_id = message.reply_to_message.from_user.id
+    is_bot = message.reply_to_message.from_user.is_bot
+    username = message.reply_to_message.from_user.username
+    first = message.reply_to_message.from_user.first_name
+
+  else:
+    user_id = message.from_user.id
+    is_bot = message.from_user.is_bot
+    username = message.from_user.username
+    first = message.from_user.first_name
+
+  user_id = user_id
+
+  if user_id ==  6191863486:
+    chcc = "OWNER"
+
+  else:
+    chcc = ok(user_id)
+
+  await message.reply(f'''
+ 
+<b>USER INFO</b>
+
+<b>🆔 ID:</b> <code>{user_id}</code>
+<b>👱 NAME:</b><a href="tg://user?id={user_id}">{first}</a>
+<b>🌐 Username:</b> @{username}
+<b>👀 User type = </b> [{chcc}]
+<b>🤖 IS bot = </b> {is_bot}
+''')
+
+
+import time
+
+
+@dp.message_handler(commands=['ping'], commands_prefix=PREFIX)
+async def cdgh(message: types.Message):
+  s = time.perf_counter()
+  me = await message.reply("<b>Checking...</b>", disable_web_page_preview=True)
+  e = time.perf_counter()
+  try:
+    await me.edit_text(f"<code>Ping: {(e-s)*1000:.2f} ms</code>")
+  except Exception as e:
+    print(e)
+
+
+if __name__ == '__main__':
+
+  executor.start_polling(dp, skip_updates=True)
